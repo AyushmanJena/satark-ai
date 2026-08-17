@@ -1,4 +1,4 @@
-const WS_URL = 'ws://192.168.29.208:8082';
+const WS_URL = 'ws://192.168.29.208:8000/ws/exit';
 
 export type ExitGate = {
   id: string;

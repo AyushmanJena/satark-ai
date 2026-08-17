@@ -1,6 +1,6 @@
 import type { CrowdRegion } from '@/services/crowd-api';
 
-const WS_URL = 'ws://192.168.29.208:8080';
+const WS_URL = 'ws://192.168.29.208:8000/ws/crowd';
 
 export type CrowdWebSocketMessage = {
   type: 'CROWD_UPDATE';
