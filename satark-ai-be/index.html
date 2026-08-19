@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CrowdShield — Crowd Density Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ============================================================ -->
+  <!-- SIDEBAR                                                       -->
+  <!-- ============================================================ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div class="brand-text">
+        <span class="brand-name">CrowdShield</span>
+        <span class="brand-sub">Density Monitor</span>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <h3 class="side-heading">Backend</h3>
+      <label class="field">
+        <span class="field-label">FastAPI backend URL</span>
+        <input type="text" id="backendUrl" value="http://192.168.29.208:8000" spellcheck="false" />
+        <span class="field-hint">Same host your mobile app's WebSocket points at, using http:// instead of ws://.</span>
+      </label>
+      <label class="field field-row">
+        <input type="checkbox" id="pushToBackend" checked />
+        <span>Push live zone data to mobile app</span>
+      </label>
+      <div class="conn-status" id="connStatus">
+        <span class="dot" id="connDot"></span>
+        <span id="connLabel">Not connected</span>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <h3 class="side-heading">Footage</h3>
+      <label class="field">
+        <span class="field-label">Upload CCTV / drone video</span>
+        <div class="file-drop" id="fileDrop">
+          <input type="file" id="videoFile" accept=".mp4,.mov,.avi,.mkv" hidden />
+          <span id="fileDropText">Drag & drop, or click to browse</span>
+        </div>
+        <span class="field-hint" id="fileMeta"></span>
+      </label>
+    </div>
+
+    <div class="side-section">
+      <h3 class="side-heading">Detection settings</h3>
+      <label class="field field-row">
+        <input type="checkbox" id="aerialMode" />
+        <span>Aerial / drone footage mode</span>
+      </label>
+      <span class="field-hint">Turns on tiled inference so small, top-down people aren't lost when the frame is downscaled.</span>
+
+      <label class="field">
+        <span class="field-label">YOLO weights (.pt)</span>
+        <input type="text" id="modelPath" value="yolov8n.pt" spellcheck="false" />
+      </label>
+
+      <label class="field">
+        <span class="field-label">Confidence threshold — <b id="confVal">0.25</b></span>
+        <input type="range" id="confThreshold" min="0.05" max="0.90" step="0.05" value="0.25" />
+      </label>
+
+      <label class="field">
+        <span class="field-label">Inference resolution (imgsz)</span>
+        <select id="imgsz">
+          <option value="320">320</option>
+          <option value="480">480</option>
+          <option value="640" selected>640</option>
+          <option value="960">960</option>
+          <option value="1280">1280</option>
+        </select>
+      </label>
+
+      <div id="tileFields" class="hidden">
+        <label class="field">
+          <span class="field-label">Tile size (px)</span>
+          <select id="tileSize">
+            <option value="320">320</option>
+            <option value="480">480</option>
+            <option value="640" selected>640</option>
+            <option value="800">800</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Tile overlap — <b id="tileOverlapVal">0.20</b></span>
+          <input type="range" id="tileOverlap" min="0" max="0.5" step="0.05" value="0.2" />
+        </label>
+        <p class="field-hint">Tiled mode runs the model on overlapping crops — slower per frame, but recovers small/top-down detections a single full-frame pass misses.</p>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <h3 class="side-heading">Grid settings</h3>
+      <div class="field-pair">
+        <label class="field">
+          <span class="field-label">Rows</span>
+          <input type="number" id="gridRows" min="1" max="15" value="3" />
+        </label>
+        <label class="field">
+          <span class="field-label">Columns</span>
+          <input type="number" id="gridCols" min="1" max="15" value="3" />
+        </label>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <h3 class="side-heading">Density thresholds</h3>
+      <span class="field-hint">Set the low / high bounds in the Setup tab once footage is loaded.</span>
+    </div>
+  </aside>
+
+  <!-- ============================================================ -->
+  <!-- MAIN                                                          -->
+  <!-- ============================================================ -->
+  <main class="main">
+
+    <header class="hero">
+      <div class="hero-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L3 6v6c0 5.25 3.75 9.5 9 10 5.25-.5 9-4.75 9-10V6l-9-4z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="M8.5 12.2l2.3 2.3 4.7-4.9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Geo-Grid Crowd Density Monitor</h1>
+        <p>Upload CCTV or drone footage, map it to real-world lat/lon zones, and track live density, hotspots, a cumulative heatmap, and predictive risk alerts before zones go critical.</p>
+      </div>
+    </header>
+
+    <nav class="tabs" id="tabs" role="tablist">
+      <button class="tab active" data-tab="setup" role="tab" aria-selected="true">Setup</button>
+      <button class="tab" data-tab="monitor" role="tab" aria-selected="false">Live Monitor</button>
+      <button class="tab" data-tab="heatmap" role="tab" aria-selected="false">Heatmap</button>
+      <button class="tab" data-tab="risk" role="tab" aria-selected="false">Risk Prediction</button>
+      <button class="tab" data-tab="sos" role="tab" aria-selected="false">SOS Alerts</button>
+      <span class="tab-indicator" id="tabIndicator"></span>
+    </nav>
+
+    <!-- ---------------- SETUP ---------------- -->
+    <section class="panel active" id="panel-setup">
+      <div id="setupEmpty" class="empty-state">
+        <div class="empty-icon">▢</div>
+        <p>Upload a video from the sidebar to get started.</p>
+      </div>
+
+      <div id="setupContent" class="hidden">
+        <div class="card">
+          <div class="card-head">
+            <span class="step-label">Step 1</span>
+            <h2>CCTV frame geographic bounds</h2>
+          </div>
+          <div class="frame-preview">
+            <img id="firstFrame" alt="First frame preview" />
+            <span class="frame-caption" id="frameCaption">Frame size: —</span>
+          </div>
+          <p class="card-note">Enter the lat/lon of the frame's top-left and bottom-right corners — i.e. the real-world points those corners of the video correspond to.</p>
+
+          <div class="corner-grid">
+            <div class="corner-col">
+              <h4>Top-left corner</h4>
+              <label class="field">
+                <span class="field-label">Latitude</span>
+                <input type="number" id="tlLat" value="0.000000" step="0.000001" />
+              </label>
+              <label class="field">
+                <span class="field-label">Longitude</span>
+                <input type="number" id="tlLon" value="0.000000" step="0.000001" />
+              </label>
+            </div>
+            <div class="corner-col">
+              <h4>Bottom-right corner</h4>
+              <label class="field">
+                <span class="field-label">Latitude</span>
+                <input type="number" id="brLat" value="0.000000" step="0.000001" />
+              </label>
+              <label class="field">
+                <span class="field-label">Longitude</span>
+                <input type="number" id="brLon" value="0.000000" step="0.000001" />
+              </label>
+            </div>
+          </div>
+          <p class="card-note" id="zoneCountNote">Total zones: 9 (set rows/cols in the sidebar)</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <span class="step-label">Step 2</span>
+            <h2>Density thresholds</h2>
+          </div>
+          <p class="card-note">Zone color is based on raw people count per zone, not people/m². Lat/lon corners (if entered) still place zones correctly on the mobile app's map — they don't affect these thresholds.</p>
+          <div class="field-pair">
+            <label class="field">
+              <span class="field-label">Low density upper bound (people / zone)</span>
+              <input type="number" id="lowThreshold" value="3" step="1" />
+            </label>
+            <label class="field">
+              <span class="field-label">High density lower bound (people / zone)</span>
+              <input type="number" id="highThreshold" value="8" step="1" />
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2 id="zoneTableHeading">Zone coordinates (3×3 grid = 9 zones)</h2>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" id="zoneCoordTable">
+              <thead>
+                <tr><th>Zone</th><th>Top-left (lat, lon)</th><th>Bottom-right (lat, lon)</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="banner banner-warning" id="coordsWarning">Lat/lon corners are still at default (0, 0). Zone coordinates above are placeholders until you enter real values in Step 1.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------- LIVE MONITOR ---------------- -->
+    <section class="panel" id="panel-monitor">
+      <div id="monitorEmpty" class="empty-state">
+        <div class="empty-icon">▢</div>
+        <p>Upload a video from the sidebar to get started.</p>
+      </div>
+
+      <div id="monitorContent" class="hidden">
+        <div class="control-row">
+          <button class="btn btn-primary" id="startBtn">▶ Start Processing</button>
+          <button class="btn btn-ghost" id="stopBtn">⏹ Stop</button>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-card">
+            <span class="metric-label">Total people (monitored area)</span>
+            <span class="metric-value" id="totalCount">0</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">High-density zones</span>
+            <span class="metric-value" id="redZones">0</span>
+          </div>
+        </div>
+
+        <p class="banner" id="pushStatus" style="display:none;"></p>
+
+        <div class="monitor-grid">
+          <div class="video-pane">
+            <img id="monitorFrame" alt="Live annotated feed" />
+            <div class="video-placeholder" id="videoPlaceholder">Feed will appear here once processing starts</div>
+          </div>
+          <div class="side-pane">
+            <div class="table-wrap">
+              <table class="data-table" id="zoneLiveTable">
+                <thead><tr><th>Zone</th><th>Count</th><th>Density</th><th>Level</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="legend">
+              <span class="legend-title">Legend</span>
+              <span class="badge badge-low">LOW</span>
+              <span class="badge badge-med">MEDIUM</span>
+              <span class="badge badge-high">HIGH</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------- HEATMAP ---------------- -->
+    <section class="panel" id="panel-heatmap">
+      <div id="heatmapEmpty" class="empty-state">
+        <div class="empty-icon">▢</div>
+        <p>Upload a video from the sidebar to get started.</p>
+      </div>
+
+      <div id="heatmapContent" class="hidden">
+        <div class="card">
+          <div class="card-head"><h2>Cumulative crowd heatmap</h2></div>
+          <p class="card-note">Accumulates detected foot positions over time so persistent hotspots glow brighter, while the decay factor lets old activity fade as the crowd moves on.</p>
+          <div class="field-pair">
+            <label class="field">
+              <span class="field-label">Heatmap decay (lower = fades faster) — <b id="decayVal">0.970</b></span>
+              <input type="range" id="decay" min="0.80" max="0.999" step="0.005" value="0.97" />
+            </label>
+            <label class="field field-row" style="align-self:flex-end;">
+              <input type="checkbox" id="heatmapOnly" />
+              <span>Show raw heatmap (no video underneath)</span>
+            </label>
+          </div>
+          <div class="video-pane">
+            <img id="heatmapFrame" alt="Crowd heatmap" />
+            <div class="video-placeholder" id="heatmapPlaceholder">Heatmap will appear here once processing starts</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------- RISK PREDICTION ---------------- -->
+    <section class="panel" id="panel-risk">
+      <div id="riskEmpty" class="empty-state">
+        <div class="empty-icon">▢</div>
+        <p>Upload a video from the sidebar to get started.</p>
+      </div>
+
+      <div id="riskContent" class="hidden">
+        <div class="card">
+          <div class="card-head"><h2>Predictive risk monitor</h2></div>
+          <p class="card-note">Fits a trend line to each zone's recent density instead of just reading the current frame, so a zone climbing fast toward the high-density threshold gets flagged before it crosses it.</p>
+
+          <div class="field-triple">
+            <label class="field">
+              <span class="field-label">Trend window (sec of history) — <b id="historyWindowVal">15</b></span>
+              <input type="range" id="historyWindow" min="5" max="60" step="5" value="15" />
+            </label>
+            <label class="field">
+              <span class="field-label">Alert if High predicted within (sec) — <b id="etaAlertVal">20</b></span>
+              <input type="range" id="etaAlert" min="5" max="120" step="5" value="20" />
+            </label>
+            <label class="field">
+              <span class="field-label">Consecutive rising readings to confirm — <b id="minConfirmVal">3</b></span>
+              <input type="range" id="minConfirm" min="1" max="10" step="1" value="3" />
+            </label>
+          </div>
+
+          <p class="banner banner-success" id="riskBanner">No zones currently trending toward high density.</p>
+
+          <div class="table-wrap">
+            <table class="data-table" id="riskTable">
+              <thead><tr><th>Zone</th><th>Density</th><th>Trend</th><th>Slope (units/s)</th><th>ETA to High</th><th>Risk</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <p class="card-note">Live density trend — top zones by current reading</p>
+          <div class="chart-wrap">
+            <canvas id="riskChart" height="90"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------- SOS ALERTS ---------------- -->
+    <section class="panel" id="panel-sos">
+      <div class="card">
+        <div class="card-head"><h2>Active SOS alerts</h2></div>
+        <p class="card-note">Mobile users who have hit the SOS button, with their reported location.</p>
+
+        <div class="sos-controls">
+          <label class="field field-row">
+            <input type="checkbox" id="sosLive" />
+            <span>🔴 Live monitoring (auto-refresh every 3s)</span>
+          </label>
+          <button class="btn btn-ghost" id="sosRefresh">🔄 Refresh now</button>
+        </div>
+        <span class="field-hint" id="sosLastChecked">Last checked: —</span>
+
+        <div id="sosBody"></div>
+
+        <div class="map-wrap hidden" id="sosMapWrap">
+          <div id="sosMap"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
