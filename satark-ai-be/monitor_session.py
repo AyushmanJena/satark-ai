@@ -1,19 +1,3 @@
-"""
-One MonitorSession = one video-processing run, owned by a single
-WebSocket connection from the admin dashboard.
-
-The actual OpenCV/YOLO loop runs on a background thread (CPU-bound,
-would otherwise block FastAPI's event loop and every other request -
-mobile crowd/exit sockets, SOS, other admin tabs). Results are handed
-back through a plain thread-safe queue.Queue; monitor.py's async
-WebSocket handler drains it with `await asyncio.to_thread(queue.get)`
-and forwards each message straight to the browser as JSON.
-
-This is the same producer/consumer shape as crowd_state.py already
-uses (update_regions()/get_regions() from a lock-protected dict) -
-just with a queue instead of a single "latest value" slot, since here
-we want every frame delivered, not just the most recent one.
-"""
 import base64
 import logging
 import queue
@@ -49,16 +33,6 @@ def encode_jpg_base64(frame_bgr) -> str:
 
 
 def _push_regions_to_crowd_state(grid_cells, zone_rows):
-    """
-    Updates crowd_state directly - an in-process function call, not an
-    HTTP request. monitor.py and crowd.py are the same FastAPI app now,
-    so there's no network round-trip needed the way the old Streamlit
-    version required (main.py was a separate process from server.py).
-
-    Pushes the full cell geometry plus the detected density level so
-    the mobile app can render the exact admin-defined area regardless
-    of any device location.
-    """
     zone_row_by_id = {str(row["zone"]): row for row in zone_rows}
     regions = []
     for g in grid_cells:
@@ -116,12 +90,10 @@ class MonitorSession:
 
         self.push_to_backend = bool(config.get("push_to_backend", True))
 
-        self.queue: queue.Queue = queue.Queue(maxsize=4)  # small - always prefer latest frame over buffering stale ones
+        self.queue: queue.Queue = queue.Queue(maxsize=4)
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
-        # Probe the video once up front so grid_cells (and the "zones"
-        # message) are ready before the background thread even starts.
         probe = cv2.VideoCapture(self.video_path)
         ok, _ = probe.read()
         self.frame_width = int(probe.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -160,8 +132,6 @@ class MonitorSession:
         try:
             self.queue.put(message, timeout=1.0)
         except queue.Full:
-            # Consumer (the WS handler) is behind - drop this frame
-            # rather than block the detection loop waiting for room.
             logger.warning("Monitor queue full, dropping a frame update")
 
     def _run(self):
@@ -191,10 +161,6 @@ class MonitorSession:
                 zone_counts = assign_zone_counts(boxes_xyxy, self.grid_cells, heat_map,
                                                   self.frame_width, self.frame_height)
 
-                # Always raw people-count per zone for the Low/Med/High
-                # calculation, whether or not real lat/lon corners were
-                # entered — coordinates only affect where zones are placed
-                # on the mobile app's map (see build_grid), not this.
                 zone_values = {g["id"]: zone_counts[g["id"]] for g in self.grid_cells}
 
                 overlay = frame.copy()
@@ -241,4 +207,4 @@ class MonitorSession:
             logger.exception("Monitor session crashed")
             self._emit({"type": "error", "message": str(e)})
         finally:
-            self._emit(None)  # sentinel: tells the WS handler this session is finished
+            self._emit(None)

@@ -1,14 +1,3 @@
-"""
-/ws/exit — safest-exit routing for the mobile app.
-
-Mirrors server2.js: on EXIT_REQUEST, finds the nearest hardcoded exit
-gate and returns its distance + compass bearing from the user.
-
-TODO(real-routing): "nearest" is a straight-line haversine distance
-today. Once the control-room dashboard reports per-zone density
-between the user and each gate, swap `find_best_exit()` for a
-least-crowded-path calculation instead of pure distance.
-"""
 import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect

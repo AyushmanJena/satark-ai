@@ -1,5 +1,6 @@
 step 1
 in terminal cd stark-ai-be
+ .\venv\Scripts\Activate.ps1
 then uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 
 step 2

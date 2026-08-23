@@ -1,15 +1,3 @@
-"""
-/api/monitor/upload and /ws/monitor — what the admin dashboard's
-app.js talks to. Message shapes here match its doc comment exactly:
-POST returns {video_id, width, height, fps, first_frame}; the
-WebSocket accepts a {"type": "start", ...config} message and streams
-back {"type": "zones" | "frame" | "done" | "error", ...}.
-
-The actual detection work happens in monitor_session.py on a
-background thread per connection - this file is just the glue: accept
-the upload, accept the socket, hand config to a MonitorSession, and
-relay whatever it produces straight to the browser.
-"""
 import asyncio
 import json
 import logging
@@ -27,13 +15,8 @@ from monitor_session import MonitorSession, encode_jpg_base64
 logger = logging.getLogger("satark.monitor.routes")
 router = APIRouter()
 
-# video_id -> path of the uploaded file on disk. In-memory, per-process -
-# fine for a single-admin MVP; gone on restart, same trade-off as the
-# other in-memory state in this backend (SOS alerts, crowd_state).
 _uploaded_videos: dict[str, str] = {}
 
-# model_path -> loaded YOLO model. Loading weights takes real time, so
-# this avoids repeating it every time someone clicks Start.
 _model_cache: dict[str, object] = {}
 _model_cache_lock = threading.Lock()
 

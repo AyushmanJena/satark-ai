@@ -1,4 +1,3 @@
-"""Geographic calculations shared by crowd density and exit routing."""
 import math
 
 EARTH_RADIUS_METRES = 6_371_000

@@ -1,12 +1,3 @@
-"""
-Shared state: real crowd zones pushed by the admin app after it runs
-YOLO detection on uploaded CCTV footage.
-
-crowd.py's /ws/crowd reads from here. If nothing has been pushed yet
-(or the admin app stopped processing a while ago), it falls back to a
-mock payload so the mobile app still shows *something* during
-development - but real pushed data always wins when fresh.
-"""
 import threading
 import time
 
@@ -34,7 +25,6 @@ def get_regions() -> list[dict]:
 
 
 def get_regions_payload() -> list[dict]:
-    """Return the latest full region payload for websocket delivery."""
     with _lock:
         return [dict(region) for region in _state["regions"]]
 

@@ -1,23 +1,3 @@
-"""
-Satark AI — backend.
-
-Single FastAPI app serving:
-
-    ws://<host>:8000/ws/crowd        crowd density feed (mobile)
-    ws://<host>:8000/ws/exit         safest-exit routing (mobile)
-    POST /api/sos                    SOS alert creation (mobile)
-    GET  /api/sos/active             active SOS alerts (admin, polled)
-    POST /api/sos/{id}/resolve       mark an alert handled (admin)
-    POST /api/monitor/upload         video upload (admin)
-    WS   /ws/monitor                 live detection/heatmap/risk feed (admin)
-
-The admin dashboard itself (index.html/app.js/styles.css) is served
-separately by `python main.py` on its own port — this app only serves
-JSON/WebSocket APIs, nothing static. CORS is wide open below because
-of that: the admin page (e.g. http://localhost:8501) and this backend
-(e.g. http://localhost:8000) are different origins as far as the
-browser is concerned, even on the same machine.
-"""
 import logging
 
 from fastapi import FastAPI
@@ -34,9 +14,6 @@ logger = logging.getLogger("satark.server")
 
 app = FastAPI(title="Satark AI — Backend")
 
-# Wide open on purpose for local dev — the admin dashboard (main.py,
-# its own port) and the Expo app both need to reach this from a
-# different origin. Restrict this before this goes anywhere real.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -62,9 +39,6 @@ def health_check():
 
 
 if __name__ == "__main__":
-    # This block only runs with `python server.py`. Since your workflow
-    # runs `uvicorn server:app --reload` directly from the terminal
-    # instead, this is just a fallback for running it directly.
     import uvicorn
 
     uvicorn.run("server:app", host=config.HOST, port=config.PORT, reload=True)

@@ -1,58 +1,3 @@
-/* =========================================================================
-   CrowdShield admin dashboard — frontend only.
-
-   This file assumes the FastAPI backend exposes the following endpoints.
-   The three under "EXISTING" match main.py exactly (same paths, same
-   payload shape). The two under "NEW — needs implementing" replace the
-   in-process Streamlit video loop (OpenCV + YOLO) that used to run
-   frame-by-frame inside the Python script; that compute has to live on
-   the server now, so the dashboard talks to it over HTTP (upload) and a
-   WebSocket (live per-frame results) instead of drawing straight into a
-   Streamlit widget.
-
-   EXISTING (unchanged, called straight from the browser):
-     GET  {backendUrl}/api/sos/active            -> { alerts: [...] }
-     POST {backendUrl}/api/sos/{id}/resolve      -> resolves an alert
-     POST {backendUrl}/api/crowd/regions         -> pushed by the SERVER
-                                                     during a monitor
-                                                     session, not by this
-                                                     file — kept here only
-                                                     as a comment for
-                                                     context.
-
-   NEW — needs implementing on the FastAPI side:
-     POST {backendUrl}/api/monitor/upload
-       multipart/form-data, field "video"
-       -> { video_id, width, height, fps, first_frame: "<base64 jpg>" }
-
-     WS   {backendUrl (ws://)}/ws/monitor
-       Client -> server:
-         { type: "start", video_id, grid_rows, grid_cols,
-           top_left_lat, top_left_lon, bottom_right_lat, bottom_right_lon,
-           low_threshold, high_threshold, aerial_mode, model_path,
-           conf_threshold, imgsz, tile_size, tile_overlap,
-           push_to_backend, backend_url, decay, heatmap_only,
-           history_window_sec, eta_alert_sec, min_confirm_frames }
-         { type: "stop" }
-
-       Server -> client:
-         { type: "zones", grid_cells: [{ id, row, col, lat_top, lat_bottom,
-                                          lon_left, lon_right }] }
-         { type: "frame",
-           frame: "<base64 jpg>", heatmap_frame: "<base64 jpg>",
-           total_count, red_zones,
-           zone_rows: [{ zone, count, density, level }],
-           risk_rows: [{ zone, density, trend, slope, eta, risk }],
-           alerts: ["..."],
-           chart: { labels: [...], series: { "Zone 1": [...], ... } },
-           push_status: { ok: true|false, message: "...", time: "HH:MM:SS" } }
-         { type: "done" }
-         { type: "error", message: "..." }
-
-   Everything below degrades gracefully (clear inline errors, no crashes)
-   if those two endpoints aren't wired up yet.
-   ========================================================================= */
-
 (() => {
   "use strict";
 
@@ -669,9 +614,6 @@
     }
   });
 
-  /* ---------------------------------------------------------------------
-     Init
-     --------------------------------------------------------------------- */
   renderZoneTable();
   refreshSos();
 })();

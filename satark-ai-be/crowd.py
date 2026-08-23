@@ -1,12 +1,3 @@
-"""
-/ws/crowd - crowd density feed for the mobile app.
-POST /api/crowd/regions - where the admin app pushes real zone data
-after running YOLO detection on uploaded CCTV footage.
-
-The websocket should stream the exact admin-defined regions stored in
-crowd_state, so the mobile frontend can render the same cells regardless
-of the device's current location.
-"""
 import asyncio
 import contextlib
 import logging
@@ -22,14 +13,6 @@ router = APIRouter()
 
 
 def _current_regions() -> tuple[list[CrowdRegion], str]:
-    """
-    Return the latest backend-defined regions.
-
-    If fresh admin data exists, mark it as CCTV-backed. If there is
-    stored data but it is stale, still return the same geometry so the
-    mobile app keeps showing the admin-defined area, but label it as a
-    mock/stale fallback.
-    """
     regions = [CrowdRegion.model_validate(region) for region in crowd_state.get_regions_payload()]
 
     if not regions:
@@ -42,7 +25,6 @@ def _current_regions() -> tuple[list[CrowdRegion], str]:
 
 
 async def _send_periodic_updates(websocket: WebSocket) -> None:
-    """Push the latest regions at the configured interval."""
     while True:
         await asyncio.sleep(config.CROWD_UPDATE_INTERVAL_SECONDS)
 
@@ -90,11 +72,6 @@ async def crowd_websocket(websocket: WebSocket) -> None:
         with contextlib.suppress(asyncio.CancelledError):
             await periodic_task
 
-
-# ------------------------------------------------------------------
-# Admin push endpoint - the admin app calls this after each detection
-# pass on the uploaded CCTV footage.
-# ------------------------------------------------------------------
 @router.post("/api/crowd/regions")
 def push_crowd_regions(payload: CrowdRegionsPushIn):
     regions = [r.model_dump(exclude_none=True) for r in payload.regions]

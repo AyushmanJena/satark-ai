@@ -1,19 +1,4 @@
-"""
-/api/sos — SOS alerts, shared between the mobile app and the
-control-room dashboard.
 
-This is plain REST, not a WebSocket, on purpose: the mobile app POSTs
-once when the user taps SOS, and the control-room dashboard POLLS
-GET /api/sos/active on a timer (every few seconds) to build its live
-list + map. No push involved — the dashboard just asks "what's active
-right now?" repeatedly. Simple, and robust to either side dropping a
-connection.
-
-In-memory only. Alerts are lost on server restart — fine for an MVP,
-but swap this for a real database before this goes anywhere near
-production: losing active emergency alerts on a crash/deploy is not
-acceptable for a safety app.
-"""
 import itertools
 import logging
 import threading

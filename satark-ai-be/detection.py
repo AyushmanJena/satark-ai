@@ -1,23 +1,9 @@
-"""
-Pure crowd-detection logic — grid math, YOLO inference, density/heatmap/
-risk calculations. No FastAPI, no threading, no I/O beyond reading a
-video frame that's handed to it. Ported line-for-line in behavior from
-the old Streamlit main.py so results don't change, just where the code
-runs.
-
-monitor_session.py calls into this on a background thread; monitor.py
-never touches these functions directly.
-"""
 import math
 from collections import deque
 
 import cv2
 import numpy as np
 
-
-# =========================================================
-# Geometry
-# =========================================================
 def haversine_m(lat1, lon1, lat2, lon2):
     R = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -29,8 +15,6 @@ def haversine_m(lat1, lon1, lat2, lon2):
 
 def build_grid(frame_width, frame_height, grid_rows, grid_cols,
                 top_left_lat, top_left_lon, bottom_right_lat, bottom_right_lon):
-    """Same grid-building loop as main.py - pixel bounds + real-world lat/lon
-    bounds for each zone, laid out row-major."""
     cell_w_px = frame_width / grid_cols
     cell_h_px = frame_height / grid_rows
 
@@ -67,11 +51,7 @@ def cell_area_m2(grid_cells, use_real_area):
     return width_m * height_m
 
 
-# =========================================================
-# Detection
-# =========================================================
 def merge_boxes_nms(boxes, scores, iou_threshold=0.4, score_threshold=0.01):
-    """Merge overlapping boxes (e.g. from adjacent tiles) with OpenCV NMS."""
     if len(boxes) == 0:
         return np.empty((0, 4)), np.empty((0,))
     bboxes_xywh = [[int(b[0]), int(b[1]), int(b[2] - b[0]), int(b[3] - b[1])] for b in boxes]
@@ -83,7 +63,6 @@ def merge_boxes_nms(boxes, scores, iou_threshold=0.4, score_threshold=0.01):
 
 
 def detect_persons(frame, model, conf, imgsz):
-    """Standard single-pass detection (good for normal CCTV / eye-level footage)."""
     results = model(frame, classes=[0], conf=conf, imgsz=imgsz, verbose=False)
     b = results[0].boxes
     if len(b) == 0:
@@ -92,13 +71,6 @@ def detect_persons(frame, model, conf, imgsz):
 
 
 def detect_persons_tiled(frame, model, conf, imgsz, tile_size, overlap):
-    """
-    Slicing-aided inference for drone / aerial footage. A single full-frame
-    pass shrinks a wide aerial shot down to `imgsz` px, so people who are
-    already small top-down blobs lose almost all their pixels and get
-    missed. Instead we run the model on overlapping tiles at full
-    resolution and merge the results with NMS.
-    """
     h, w = frame.shape[:2]
     if h <= tile_size and w <= tile_size:
         return detect_persons(frame, model, conf, imgsz)
@@ -136,11 +108,6 @@ def detect_persons_tiled(frame, model, conf, imgsz, tile_size, overlap):
 
 
 def assign_zone_counts(boxes_xyxy, grid_cells, heat_map, frame_width, frame_height):
-    """
-    For each detected box, take its foot point (bottom-center), stamp it
-    onto the heatmap, and count it into whichever zone contains it.
-    Returns {zone_id: count}.
-    """
     zone_counts = {g["id"]: 0 for g in grid_cells}
 
     for box in boxes_xyxy:
@@ -160,9 +127,6 @@ def assign_zone_counts(boxes_xyxy, grid_cells, heat_map, frame_width, frame_heig
     return zone_counts
 
 
-# =========================================================
-# Density / level
-# =========================================================
 def density_bgr_color(value, low_threshold, high_threshold):
     if value > high_threshold:
         return (0, 0, 255)      # red (BGR)
@@ -181,12 +145,10 @@ def level_label(value, low_threshold, high_threshold):
 
 
 def level_to_crowd_level(level_label_str):
-    """Maps High/Medium/Low to the mobile app's CrowdLevel type (low/moderate/extreme)."""
     return {"High": "extreme", "Medium": "moderate", "Low": "low"}.get(level_label_str, "low")
 
 
 def draw_zone_overlay(frame, overlay, grid_cells, zone_counts, zone_values, low_threshold, high_threshold):
-    """Draws the colored zone rectangles + labels. Returns (zone_rows, red_zones)."""
     zone_rows = []
     red_zones = 0
 
@@ -214,7 +176,6 @@ def draw_zone_overlay(frame, overlay, grid_cells, zone_counts, zone_values, low_
 
 
 def render_heatmap(heat_map, frame, heatmap_only):
-    """Blurs + colormaps the accumulated heatmap, optionally blended over the frame."""
     blurred = cv2.GaussianBlur(heat_map, (0, 0), sigmaX=15)
     max_val = blurred.max()
     norm = (blurred / max_val * 255).astype(np.uint8) if max_val > 0 else blurred.astype(np.uint8)
@@ -226,12 +187,6 @@ def render_heatmap(heat_map, frame, heatmap_only):
 # Risk prediction
 # =========================================================
 class RiskTracker:
-    """
-    Per-zone rolling history + trend fitting, so a zone climbing fast
-    toward the high-density threshold gets flagged before it actually
-    crosses it. One instance per monitor session (holds state across
-    frames), stateless otherwise.
-    """
 
     def __init__(self, grid_cells, fps, history_window_sec, eta_alert_sec, min_confirm_frames):
         self.history_window_sec = history_window_sec
@@ -244,7 +199,6 @@ class RiskTracker:
         self.rising_streak = {g["id"]: 0 for g in grid_cells}
 
     def update(self, grid_cells, zone_values, high_threshold, now):
-        """Returns (risk_rows, active_alerts, chart_dict)."""
         active_alerts = []
         risk_rows = []
 

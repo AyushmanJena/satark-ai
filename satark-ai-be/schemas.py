@@ -1,10 +1,3 @@
-"""
-Message schemas.
-
-These mirror the TypeScript types in the mobile app exactly
-(services/crowd-api.ts, services/crowd-websocket.ts, services/exit-service.ts)
-so the JSON going over the wire needs zero changes on the frontend.
-"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -18,10 +11,6 @@ CrowdLevel = Literal["low", "moderate", "extreme"]
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-
-# ------------------------------------------------------------------
-# Crowd density
-# ------------------------------------------------------------------
 class CrowdRegion(BaseModel):
     id: str
     level: CrowdLevel
@@ -30,7 +19,7 @@ class CrowdRegion(BaseModel):
     east: float
     west: float
     label: Optional[str] = None
-    density: Optional[int] = None  # 0-100 mock scale, extra info for debugging/UI
+    density: Optional[int] = None  # 0-100 mock scale
 
 
 class LocationUpdateIn(BaseModel):
@@ -54,10 +43,6 @@ class CrowdRegionsPushIn(BaseModel):
     the uploaded CCTV footage - real zones with real lat/lon bounds."""
     regions: list[CrowdRegion]
 
-
-# ------------------------------------------------------------------
-# Exit routing
-# ------------------------------------------------------------------
 class ExitGate(BaseModel):
     id: str
     name: str
@@ -81,10 +66,6 @@ class ExitResponseOut(BaseModel):
     message: Optional[str] = None
     timestamp: str = Field(default_factory=utc_now_iso)
 
-
-# ------------------------------------------------------------------
-# SOS alerts
-# ------------------------------------------------------------------
 SosStatus = Literal["active", "resolved"]
 
 
